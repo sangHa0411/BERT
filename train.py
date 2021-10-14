@@ -24,6 +24,8 @@ from tokenizer import *
 from scheduler import *
 from preprocessor import *
 
+MASK_LABEL = -100
+
 def progressLearning(value, endvalue, mlm_loss, mlm_acc, sop_loss, sop_acc, bar_length=50):
     percent = float(value + 1) / endvalue
     arrow = '-' * int(round(percent * bar_length)-1) + '>'
@@ -64,7 +66,7 @@ def train(args) :
     for json_data in tqdm(data) :
         text_list = [text for text in preprocess_data(json_data) if len(text) < args.sen_max_size]
         text_data.extend(text_list)
-    print('\n')
+    print()
 
     # -- Tokenizer & Encoder
     mecab = Mecab()
@@ -75,25 +77,35 @@ def train(args) :
     print('Make Train Data')
     sop_text = []
     sop_label = []
+
+    sen_remain = []
     for text in tqdm(text_data) :
         sen_list = sent_tokenize(text)
         if len(sen_list) < 2 :
+            sen_remain.append(sen_list)
             continue
         size = int(len(sen_list)/2)
-        order_flag = np.random.binomial(size=size, n=1, p= 0.5)
+        order_flag = np.random.binomial(size=size, n=1, p=0.5)
         idx = 0
-        for i in range(0,len(sen_list),2) :
-            if i+1 < len(sen_list) :
-                prev = sen_preprocessor(sen_list[i])
-                next = sen_preprocessor(sen_list[i+1])
-                if order_flag[idx] >= 0.5 :
-                    sop_text.append((prev,next))
-                    sop_label.append(1)
-                else :
-                    sop_text.append((next,prev))
-                    sop_label.append(0)
-                idx += 1
-    print('\n')
+        for i in range(0,len(sen_list)-1,2) :
+            prev_sen = sen_preprocessor(sen_list[i])
+            next_sen = sen_preprocessor(sen_list[i+1])
+            if order_flag[idx] >= 0.5 :
+                sop_text.append((prev_sen,next_sen))
+                sop_label.append(1)
+            else :
+                sop_text.append((next_sen,prev_sen))
+                sop_label.append(0)
+            idx += 1
+
+    sen_remain = [sen for sen in sen_remain if isinstance(sen, str)==True]
+    random.shuffle(sen_remain)
+    for i in range(0, len(sen_remain)-1, 2) :
+        sen1 = sen_remain[i]
+        sen2 = sen_remain[i+1]
+        sop_text.append((sen1,sen2))
+        sop_label.append(2)
+    print()
 
     # -- Encoder
     encoder = Encoder(tokenizer, args.max_size)
@@ -104,10 +116,10 @@ def train(args) :
         idx_list, type_list = encoder(data)
         sop_input_ids.append(idx_list)
         sop_type_ids.append(type_list)
-    print('\n')
+    print()
 
     # -- Masking
-    masking = Masking(v_size)
+    masking = Masking(v_size, MASK_LABEL)
     sop_masked_ids = []
     sop_label_ids = []
     print('Masking Train Data')
@@ -115,7 +127,7 @@ def train(args) :
         masked_ids, label_ids = masking(input_ids)
         sop_masked_ids.append(masked_ids)
         sop_label_ids.append(label_ids)
-    print('\n')
+    print()
 
     # -- Dataset
     dset = BertDataset(sop_masked_ids, sop_type_ids, sop_label_ids, sop_label)
@@ -164,10 +176,11 @@ def train(args) :
     writer = SummaryWriter(args.log_dir)
 
     # -- Criterion 
-    mlm_criterion = nn.CrossEntropyLoss(ignore_index=-100).to(device)
-    sop_criterion = nn.BCELoss().to(device)
+    mlm_criterion = nn.CrossEntropyLoss(ignore_index=MASK_LABEL).to(device)
+    sop_criterion = nn.CrossEntropyLoss().to(device)
 
     # -- Training
+    print('Training')
     log_count = 0
     for epoch in range(args.epochs) :
         idx = 0
@@ -185,21 +198,20 @@ def train(args) :
             type_data = data['type_ids'].long().to(device)
             mask_data = padding_mask(in_data)
 
-            label_data = data['label_ids'].long().to(device)
-            label_data = torch.reshape(label_data, (-1,))
+            mlm_label = data['label_ids'].long().to(device)
+            mlm_label = torch.reshape(mlm_label, (-1,))
     
-            sop_data = data['sop'].float().to(device)
+            sop_label = data['sop'].long().to(device)
     
-            out_sop, out_mlm = model(in_data, type_data, mask_data)
-            out_mlm = torch.reshape(out_mlm, (-1,v_size))
-            out_sop = torch.sigmoid(out_sop)
+            sop_out, mlm_out = model(in_data, type_data, mask_data)
+            mlm_out = torch.reshape(mlm_out, (-1,v_size))
 
-            mlm_loss = mlm_criterion(out_mlm, label_data)
-            mlm_acc = (torch.argmax(out_mlm, dim=-1) == label_data).float()
-            mlm_acc = torch.masked_select(mlm_acc, label_data != -100).mean()
+            mlm_loss = mlm_criterion(mlm_out, mlm_label)
+            mlm_acc = (torch.argmax(mlm_out, dim=-1) == mlm_label).float()
+            mlm_acc = torch.masked_select(mlm_acc, mlm_label != -100).mean()
 
-            sop_loss = sop_criterion(out_sop, sop_data)
-            sop_acc = (torch.where(out_sop >= 0.5, 1.0 , 0.0) == sop_data).float().mean()
+            sop_loss = sop_criterion(sop_out, sop_label)
+            sop_acc = (torch.argmax(sop_out, dim=-1) == sop_label).float().mean()
 
             loss = mlm_loss + sop_loss
             loss.backward()
@@ -251,7 +263,7 @@ if __name__ == '__main__' :
     parser.add_argument('--epochs', type=int, default=30, help='number of epochs to train (default: 30)')
     parser.add_argument('--warmup_steps', type=int, default=2000, help='warmup steps of train (default: 2000)')
     parser.add_argument('--sen_max_size', type=int, default=512, help='max size of sentence (default: 512)')
-    parser.add_argument('--max_size', type=int, default=512, help='max size of index sequence (default: 512)')
+    parser.add_argument('--max_size', type=int, default=128, help='max size of index sequence (default: 128)')
     parser.add_argument('--layer_size', type=int, default=12, help='layer size of model (default: 12)')
     parser.add_argument('--embedding_size', type=int, default=768, help='embedding size of token (default: 768)')
     parser.add_argument('--hidden_size', type=int, default=3072, help='hidden size of position-wise layer (default: 3072)')
@@ -260,7 +272,7 @@ if __name__ == '__main__' :
     parser.add_argument('--weight_decay', type=float, default=1e-4, help='weight decay of optimizer (default: 1e-4)')
 
     # Container environment
-    parser.add_argument('--file_size', type=int, default=10, help='size of newspaper file')
+    parser.add_argument('--file_size', type=int, default=30, help='size of newspaper file')
     parser.add_argument('--data_dir', type=str, default='../GPT1/Data')
     parser.add_argument('--model_dir', type=str, default='./Model')
     parser.add_argument('--token_dir', type=str, default='./Tokenizer')
