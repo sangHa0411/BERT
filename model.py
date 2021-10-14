@@ -182,7 +182,7 @@ class TransformerEncoder(nn.Module) :
         for i in range(layer_size) :
             self.en_blocks.append(EncoderBlock(d_model, num_heads, hidden_size, drop_rate, norm_rate))
         self.o_layer = nn.Linear(d_model, v_size)
-        self.sop_layer = nn.Linear(d_model, 1)
+        self.sop_layer = nn.Linear(d_model, 3)
         
         self.init_param()
         
@@ -210,5 +210,5 @@ class TransformerEncoder(nn.Module) :
         cls_tensor = feature_tensor[:,0,:]
 
         output_tensor = self.o_layer(feature_tensor)
-        sop_tensor = self.sop_layer(cls_tensor).squeeze(1)
+        sop_tensor = self.sop_layer(cls_tensor)
         return sop_tensor, output_tensor
