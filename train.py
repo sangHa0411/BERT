@@ -190,7 +190,7 @@ def train(args) :
     
             sop_data = data['sop'].float().to(device)
     
-            out_sop, out_mlm = encoder(in_data, type_data, mask_data)
+            out_sop, out_mlm = model(in_data, type_data, mask_data)
             out_mlm = torch.reshape(out_mlm, (-1,v_size))
             out_sop = torch.sigmoid(out_sop)
 
@@ -227,8 +227,8 @@ def train(args) :
         mean_sop_acc /= len(data_loader)
 
         torch.save({'epoch' : (epoch) ,  
-            'batch_size' : 32,
-            'model_state_dict' : encoder.state_dict() , 
+            'batch_size' : args.batch_size,
+            'model_state_dict' : model.state_dict() , 
             'mlm_loss' : mean_mlm_loss.item() , 
             'mlm_acc' : mean_mlm_acc.item() , 
             'sop_loss' : mean_sop_loss.item() , 
