@@ -13,47 +13,6 @@ class PaddingMask(nn.Module) :
         flag_tensor = torch.reshape(flag_tensor , (batch_size, 1, 1, seq_size)) 
         return flag_tensor
 
-class PositionalEncoding(nn.Module) :
-    def __init__(self, max_len, d_model, cuda_flag) :
-        super(PositionalEncoding , self).__init__()
-        self.max_len = max_len
-        self.d_model = d_model
-        self.cuda_flag = cuda_flag
-        # w : weight
-        # pe : Encoding tensor
-        self.w = torch.sqrt(torch.tensor(d_model, dtype=torch.float32, requires_grad=False))
-        self.pe = self.get_embedding(max_len, d_model)
-        if cuda_flag == True :
-            self.w = self.w.cuda()
-            self.pe = self.pe.cuda()
-        
-    # Embedding tensor : (batch_size, sen_size, embedding_dim)
-    # Making Encoding tensor (1, sen_size, embedding_dim)
-    def get_embedding(self, pos_len, d_model) :
-        pos_vec = torch.arange(pos_len).float()
-        pos_vec = pos_vec.unsqueeze(1)
-
-        i_vec = torch.arange(d_model).float() / 2
-        i_vec = torch.floor(i_vec) * 2
-        i_vec = i_vec.unsqueeze(0) / d_model
-        i_vec = 1 / torch.pow(1e+4 , i_vec)
-
-        em = torch.mul(pos_vec, i_vec)
-        pe = torch.zeros(pos_len, d_model, requires_grad=False)
-        sin_em = torch.sin(em)
-        cos_em = torch.cos(em)
-
-        pe[:,::2] = sin_em[:,::2]
-        pe[:,1::2] = cos_em[:,1::2]
-
-        return pe.unsqueeze(0)
-
-    # input tensor : (batch_size, sen_size, embedding_dim)
-    def forward(self, in_tensor) :
-        batch_size, seq_size, em_dim = in_tensor.shape                  
-        en_tensor = (in_tensor * self.w) + self.pe[:,:seq_size,:]
-        return en_tensor
-
 # Multihead Attention Layer
 class MultiHeadAttention(nn.Module) :
     def __init__(self, d_model, num_heads) :
@@ -119,9 +78,9 @@ class FeedForward(nn.Module) :
         super(FeedForward , self).__init__()
         self.hidden_size = hidden_size
         self.d_model = d_model
-        # relu activation and input, output dim are same
+        # gelu activation and input, output dim are same
         self.ff = nn.Sequential(nn.Linear(d_model , hidden_size), 
-                                nn.ReLU(),
+                                nn.GELU(),
                                 nn.Linear(hidden_size , d_model))
 
     def forward(self , in_tensor) :
@@ -155,7 +114,7 @@ class EncoderBlock(nn.Module) :
 
 # Transformer Encoder
 class TransformerEncoder(nn.Module) :
-    def __init__(self, layer_size, max_size, v_size, d_model, num_heads, hidden_size, drop_rate, norm_rate, cuda_flag) :
+    def __init__(self, layer_size, max_size, v_size, d_model, num_heads, hidden_size, drop_rate, norm_rate) :
         super(TransformerEncoder , self).__init__()
         self.layer_size = layer_size
         self.max_size = max_size
@@ -167,14 +126,18 @@ class TransformerEncoder(nn.Module) :
         self.norm_rate = norm_rate
 
         self.em = nn.Embedding(num_embeddings=v_size, 
-                               embedding_dim=d_model, 
-                               padding_idx=0) # embedding
-
+            embedding_dim=d_model, 
+            padding_idx=0
+        ) # id embedding
         self.type_em = nn.Embedding(num_embeddings=3,
-                                    embedding_dim=d_model,
-                                    padding_idx=0)
+            embedding_dim=d_model,
+            padding_idx=0
+        ) # token type embedding
+        self.pos_em = nn.Embedding(num_embeddings=max_size+1,
+            embedding_dim=d_model,
+            padding_idx=0
+        ) # positional embedding
 
-        self.pos = PositionalEncoding(max_size, d_model, cuda_flag) # positional encoding
         self.en_blocks = nn.ModuleList()
         self.drop_layer = nn.Dropout(drop_rate)
         self.norm_layer = nn.LayerNorm(d_model , eps=norm_rate)
@@ -191,22 +154,25 @@ class TransformerEncoder(nn.Module) :
             if p.dim() > 1 :
                 nn.init.xavier_uniform_(p)
 
-    # input_ids tensor
-    # attention_mask tensor    
-    def forward(self, input_id_tensor, type_id_tensor, mask_id_tensor) :
+    def get_feature(self, input_id_tensor, pos_id_tensor, type_id_tensor, mask_id_tensor) :
         # encoder input tensor
         em_tensor = self.em(input_id_tensor) # embedding
-        pos_em_tensor = self.pos(em_tensor) # positional encoding
+        pos_tensor = self.pos_em(pos_id_tensor) # positional embedding
         type_tensor = self.type_em(type_id_tensor) # type embedding
 
-        en_tensor = pos_em_tensor + type_tensor # encoded tensor
+        en_tensor = em_tensor + pos_tensor + type_tensor # encoded tensor
         en_tensor = self.drop_layer(en_tensor) # dropout layer
         
         tensor_ptr = en_tensor
         for i in range(self.layer_size) :
             tensor_ptr = self.en_blocks[i](tensor_ptr, mask_id_tensor)
+        return tensor_ptr
 
-        feature_tensor = tensor_ptr
+
+    # input_ids tensor
+    # attention_mask tensor    
+    def forward(self, input_id_tensor, pos_id_tensor, type_id_tensor, mask_id_tensor) :
+        feature_tensor = self.get_feature(input_id_tensor, pos_id_tensor, type_id_tensor, mask_id_tensor)
         cls_tensor = feature_tensor[:,0,:]
 
         output_tensor = self.o_layer(feature_tensor)
