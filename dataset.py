@@ -64,6 +64,7 @@ class BertCollator:
     
     def __call__(self, batch_samples):   
         batch_input_ids = []
+        batch_pos_ids = []
         batch_type_ids = []
         batch_label_ids = []
         batch_sop = []
@@ -75,16 +76,19 @@ class BertCollator:
             sop = data['sop']
 
             batch_input_ids.append(torch.tensor(input_ids))
+            batch_pos_ids.append(torch.arange(1,len(input_ids)+1))
             batch_type_ids.append(torch.tensor(type_ids))
             batch_label_ids.append(torch.tensor(label_ids))
             batch_sop.append(sop)
 
         batch_input_tensor = pad_sequence(batch_input_ids, batch_first=True, padding_value=Token.PAD)
+        batch_pos_tensor = pad_sequence(batch_pos_ids, batch_first=True, padding_value=Token.PAD)
         batch_type_tensor = pad_sequence(batch_type_ids, batch_first=True, padding_value=Token.PAD)
         batch_label_tensor = pad_sequence(batch_label_ids, batch_first=True, padding_value=-100)
         batch_sop_tensor = torch.tensor(batch_sop)
         
         return {'input_ids' : batch_input_tensor,
+            'pos_ids' : batch_pos_tensor,
             'type_ids' : batch_type_tensor,
             'label_ids' : batch_label_tensor,
             'sop' : batch_sop_tensor
