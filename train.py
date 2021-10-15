@@ -92,10 +92,10 @@ def train(args) :
             next_sen = sen_preprocessor(sen_list[i+1])
             if order_flag[idx] >= 0.5 :
                 sop_text.append((prev_sen,next_sen))
-                sop_label.append(1)
+                sop_label.append(1) # forward order
             else :
                 sop_text.append((next_sen,prev_sen))
-                sop_label.append(0)
+                sop_label.append(0) # backward order
             idx += 1
 
     sen_remain = [sen for sen in sen_remain if isinstance(sen, str)==True]
@@ -104,7 +104,7 @@ def train(args) :
         sen1 = sen_remain[i]
         sen2 = sen_remain[i+1]
         sop_text.append((sen1,sen2))
-        sop_label.append(2)
+        sop_label.append(2) # not related
     print()
 
     # -- Encoder
@@ -154,14 +154,13 @@ def train(args) :
         hidden_size=args.hidden_size,
         drop_rate=0.1,
         norm_rate=1e-6,
-        cuda_flag=use_cuda
     ).to(device)
 
     init_lr = 1e-4
     # -- Optimizer
     optimizer = optim.Adam(model.parameters(), 
         lr=init_lr, 
-        betas=(0.9,0.98), 
+        betas=(0.9,0.999), 
         eps=1e-9,
         weight_decay=args.weight_decay
     )
@@ -196,6 +195,7 @@ def train(args) :
 
             in_data = data['input_ids'].long().to(device)
             type_data = data['type_ids'].long().to(device)
+            pos_data = data['pos_ids'].long().to(device)
             mask_data = padding_mask(in_data)
 
             mlm_label = data['label_ids'].long().to(device)
@@ -203,7 +203,7 @@ def train(args) :
     
             sop_label = data['sop'].long().to(device)
     
-            sop_out, mlm_out = model(in_data, type_data, mask_data)
+            sop_out, mlm_out = model(in_data, pos_data, type_data, mask_data)
             mlm_out = torch.reshape(mlm_out, (-1,v_size))
 
             mlm_loss = mlm_criterion(mlm_out, mlm_label)
@@ -247,7 +247,7 @@ def train(args) :
             'sop_acc' : mean_sop_acc.item()} , 
         f'./Model/checkpoint_bert.pt') 
 
-        print('\nMean MLM Loss : %.3f , Mean MLM Accuracy : %.3f \t Mean SOP Loss : %.3f , Mean SOP Accuracy : %.3f' %(mean_mlm_loss.item(), 
+        print('\nMean MLM Loss : %.3f , Mean MLM Accuracy : %.3f \t Mean SOP Loss : %.3f , Mean SOP Accuracy : %.3f\n' %(mean_mlm_loss.item(), 
             mean_mlm_acc.item(), 
             mean_sop_loss.item(), 
             mean_sop_acc.item())
@@ -261,15 +261,15 @@ if __name__ == '__main__' :
     # Training argument
     parser.add_argument('--seed', type=int, default=777, help='random seed (default: 777)')
     parser.add_argument('--epochs', type=int, default=30, help='number of epochs to train (default: 30)')
-    parser.add_argument('--warmup_steps', type=int, default=2000, help='warmup steps of train (default: 2000)')
+    parser.add_argument('--warmup_steps', type=int, default=10000, help='warmup steps of train (default: 10000)')
     parser.add_argument('--sen_max_size', type=int, default=512, help='max size of sentence (default: 512)')
-    parser.add_argument('--max_size', type=int, default=128, help='max size of index sequence (default: 128)')
+    parser.add_argument('--max_size', type=int, default=256, help='max size of index sequence (default: 256)')
     parser.add_argument('--layer_size', type=int, default=12, help='layer size of model (default: 12)')
     parser.add_argument('--embedding_size', type=int, default=768, help='embedding size of token (default: 768)')
     parser.add_argument('--hidden_size', type=int, default=3072, help='hidden size of position-wise layer (default: 3072)')
     parser.add_argument('--head_size', type=int, default=12, help='head size of multi head attention (default: 12)')
     parser.add_argument('--batch_size', type=int, default=64, help='batch size for training (default: 64)')
-    parser.add_argument('--weight_decay', type=float, default=1e-4, help='weight decay of optimizer (default: 1e-4)')
+    parser.add_argument('--weight_decay', type=float, default=1e-2, help='weight decay of optimizer (default: 1e-2)')
 
     # Container environment
     parser.add_argument('--file_size', type=int, default=30, help='size of newspaper file')
