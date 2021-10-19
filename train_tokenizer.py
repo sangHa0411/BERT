@@ -1,15 +1,17 @@
 import os
 import re
+import sys
 import argparse
 from tqdm import tqdm
 from nltk.tokenize import sent_tokenize
 from konlpy.tag import Mecab
 
-from tokenizer import *
-from loader import *
-from preprocessor import *
-
 def train(args) :
+    sys.path.append('../')
+    from tokenizer import write_data, train_spm
+    from loader import get_data, preprocess_data
+    from preprocessor import SenPreprocessor
+
     print('Get Newspaper Data')
     data = get_data(args.data_dir, args.file_size)
 
@@ -47,10 +49,10 @@ def train(args) :
 
 if __name__ == '__main__' :
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, default='../GPT1/Data', help='Korean Newspaper Data directory')
+    parser.add_argument('--data_dir', type=str, default='../../Data', help='Korean Newspaper Data directory')
     parser.add_argument('--max_size', type=int, default=256, help='max length of sentence')
-    parser.add_argument('--file_size', type=int, default=10, help='size of newspaper file')
-    parser.add_argument('--tokenizer_dir', type=str, default='./Tokenizer',  help='File Writing Directory')
+    parser.add_argument('--file_size', type=int, default=30, help='size of newspaper file')
+    parser.add_argument('--tokenizer_dir', type=str, default='./',  help='File Writing Directory')
     parser.add_argument('--token_size', type=int, default=35000, help='Token Size (default: 35000)')
     args = parser.parse_args()
 
