@@ -11,8 +11,8 @@ def read_data(file_path) :
 def get_data(dir_path, size) :
     data_list = []
     file_list = os.listdir(dir_path)
-    file_list = random.sample(file_list, size)
-    for file in tqdm(file_list) :
+    assert size < len(file_list)
+    for file in tqdm(file_list[:size]) :
         if file.endswith('.json') :
             try :
                 file_path = os.path.join(dir_path, file)
