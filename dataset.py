@@ -13,11 +13,13 @@ class Token(IntEnum) :
     CLS = 4
     SEP = 5
     MASK = 6
+    IGNORE_INDEX = -100
 
 class BertDataset(Dataset) :
   def __init__(self, masked_ids, type_ids, label_ids, order_label) :
     super(BertDataset, self).__init__()
-    assert len(masked_ids) == len(type_ids) and len(masked_ids) == len(label_ids) and len(masked_ids) == len(order_label)
+    data_size = len(masked_ids)
+    assert data_size == len(type_ids) and data_size == len(label_ids) and data_size == len(order_label)
     self.masked_ids = masked_ids
     self.type_ids = type_ids
     self.label_ids = label_ids
@@ -84,7 +86,7 @@ class BertCollator:
         batch_input_tensor = pad_sequence(batch_input_ids, batch_first=True, padding_value=Token.PAD)
         batch_pos_tensor = pad_sequence(batch_pos_ids, batch_first=True, padding_value=Token.PAD)
         batch_type_tensor = pad_sequence(batch_type_ids, batch_first=True, padding_value=Token.PAD)
-        batch_label_tensor = pad_sequence(batch_label_ids, batch_first=True, padding_value=-100)
+        batch_label_tensor = pad_sequence(batch_label_ids, batch_first=True, padding_value=Token.IGNORE_INDEX)
         batch_sop_tensor = torch.tensor(batch_sop)
         
         return {'input_ids' : batch_input_tensor,

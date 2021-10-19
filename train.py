@@ -16,14 +16,12 @@ from nltk.tokenize import sent_tokenize
 from konlpy.tag import Mecab
 
 from model import PaddingMask, TransformerEncoder
-from dataset import BertDataset, BertDataset
+from dataset import Token, BertDataset, BertDataset
 from loader import get_data, preprocess_data
 from encoder import Encoder
 from masking import Masking
 from scheduler import Scheduler
 from preprocessor import SenPreprocessor
-
-MASK_LABEL = -100
 
 def progressLearning(value, endvalue, mlm_loss, mlm_acc, sop_loss, sop_acc, bar_length=50):
     percent = float(value + 1) / endvalue
@@ -120,7 +118,7 @@ def train(args) :
     print()
 
     # -- Masking
-    masking = Masking(v_size, MASK_LABEL)
+    masking = Masking(v_size, Token.IGNORE_INDEX)
     sop_masked_ids = []
     sop_label_ids = []
     print('Masking Train Data')
@@ -247,7 +245,7 @@ def train(args) :
             'mlm_acc' : mean_mlm_acc.item() , 
             'sop_loss' : mean_sop_loss.item() , 
             'sop_acc' : mean_sop_acc.item()} , 
-        f'./Model/checkpoint_bert.pt') 
+        os.path.join(args.model_dir, 'bert_checkpoint.pt')) 
 
         print('\nMean MLM Loss : %.3f , Mean MLM Accuracy : %.3f \t Mean SOP Loss : %.3f , Mean SOP Accuracy : %.3f\n' %(mean_mlm_loss.item(), 
             mean_mlm_acc.item(), 

@@ -3,7 +3,7 @@ import copy
 from dataset import Token
 
 class Masking :
-    def __init__(self, vocab_size, ignore_index=-100) :
+    def __init__(self, vocab_size, ignore_index=Token.IGNORE_INDEX) :
         self.vocab_size = vocab_size
         self.ignore_index = ignore_index
 
