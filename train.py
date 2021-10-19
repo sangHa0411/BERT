@@ -16,13 +16,12 @@ from nltk.tokenize import sent_tokenize
 from konlpy.tag import Mecab
 
 from model import PaddingMask, TransformerEncoder
-from dataset import *
-from loader import *
-from encoder import *
-from masking import *
-from tokenizer import *
-from scheduler import *
-from preprocessor import *
+from dataset import BertDataset, BertDataset
+from loader import get_data, preprocess_data
+from encoder import Encoder
+from masking import Masking
+from scheduler import Scheduler
+from preprocessor import SenPreprocessor
 
 MASK_LABEL = -100
 
@@ -30,7 +29,7 @@ def progressLearning(value, endvalue, mlm_loss, mlm_acc, sop_loss, sop_acc, bar_
     percent = float(value + 1) / endvalue
     arrow = '-' * int(round(percent * bar_length)-1) + '>'
     spaces = ' ' * (bar_length - len(arrow))
-    sys.stdout.write("\r[{0}] {1}/{2} \t MLM Loss : {3:.3f} , MLM Acc : {4:.3f} \t SOP Loss : {5:.3f} , SOP Acc : {6:.3f}".format(arrow + spaces,
+    sys.stdout.write("\r[{0}] {1}/{2} - MLM Loss : {3:.3f} , MLM Acc : {4:.3f} & SOP Loss : {5:.3f} , SOP Acc : {6:.3f}".format(arrow + spaces,
         value+1, 
         endvalue, 
         mlm_loss, 
@@ -52,7 +51,7 @@ def seed_everything(seed):
 def train(args) :
     # -- Seed
     seed_everything(args.seed)
-
+    
     # -- Device
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if use_cuda else "cpu")
@@ -69,6 +68,8 @@ def train(args) :
     print()
 
     # -- Tokenizer & Encoder
+    sys.path.append('./Tokenizer')
+    from tokenizer import get_spm
     mecab = Mecab()
     sen_preprocessor = SenPreprocessor(mecab)
     tokenizer = get_spm(os.path.join(args.token_dir, 'tokenizer.model'))
@@ -143,6 +144,7 @@ def train(args) :
     )
    
     # -- Model
+    # Attention mask
     padding_mask = PaddingMask()
     # Transformer Encoder
     model = TransformerEncoder(
@@ -273,8 +275,8 @@ if __name__ == '__main__' :
 
     # Container environment
     parser.add_argument('--file_size', type=int, default=30, help='size of newspaper file')
-    parser.add_argument('--data_dir', type=str, default='../GPT1/Data')
-    parser.add_argument('--model_dir', type=str, default='./Model')
+    parser.add_argument('--data_dir', type=str, default='../Data')
+    parser.add_argument('--model_dir', type=str, default='../Model/BERT')
     parser.add_argument('--token_dir', type=str, default='./Tokenizer')
     parser.add_argument('--log_dir' , type=str , default='./Log')
 
